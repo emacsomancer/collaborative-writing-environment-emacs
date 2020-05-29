@@ -1,0 +1,683 @@
+#+TITLE: Emacs collaborative writing environment
+#+AUTHOR: Benjamin Slade
+#+PROPERTY: header-args :tangle yes
+
+Save normally with ~C-x C-s~; save-and-tangle (i.e. generate =init.el= and =init.elc=) with ~C-u C-x C-s~.
+ 
+* Automatically Tangle
+First there is a property defined on the file:
+
+#+BEGIN_SRC :tangle no
+header-args :tangle yes
+#+END_SRC
+
+* Begin by setting up Emacs packages.
+This initialises the packaging system.
+
+#+BEGIN_SRC emacs-lisp
+(require 'package)
+(setq gnutls-algorithm-priority "NORMAL:-VERS-TLS1.3")
+(setq package-enable-at-startup nil)
+(setq package-archives
+      '(("GNU ELPA"     . "https://elpa.gnu.org/packages/")
+	("ORG"		. "https://orgmode.org/elpa/")
+        ("MELPA Stable" . "https://stable.melpa.org/packages/")
+        ("MELPA"        . "https://melpa.org/packages/"))
+      package-archive-priorities
+      '(("ORG"		. 20)
+	("MELPA"        . 15)
+	("MELPA Stable" . 10)
+        ("GNU ELPA"     . 5)))
+
+;; (add-to-list 'package-archives
+;;              '("melpa" . "https://melpa.org/packages/"))
+
+(package-initialize)
+#+END_SRC
+
+Then bootstrap the =use-package= package for fetching and configuring packages.
+
+#+BEGIN_SRC emacs-lisp
+(unless (package-installed-p 'use-package)
+  (package-refresh-contents)
+  (package-install 'use-package))
+
+(eval-when-compile
+  (require 'use-package))
+
+(use-package use-package
+   :ensure t
+   :pin MELPA
+   :config
+   (require 'use-package))
+#+END_SRC
+
+Set up =quelpa= for packages not in Elpa/Melpa:
+
+#+BEGIN_SRC emacs-lisp
+(use-package quelpa
+  :ensure t)
+
+(use-package quelpa-use-package
+  :ensure t)
+#+END_SRC
+
+* Set title
+#+BEGIN_SRC emacs-lisp
+(setq frame-title-format '((:eval (if (buffer-name) (abbreviate-file-name (buffer-name)) "%b")) " [%*] - Kahani Emacs"))
+#+END_SRC
+* Collaborative editing 
+For collaborative editing, use =colo(u)rful-points=, giving each separate frame editing the same buffer a different 'highlight' to distinguish where collaborative editors' points/cursors are.
+
+See further [[https://www.emacswiki.org/emacs/CollaborativeEditing][EmacsWiki:Collaborative Editing]] ; [[https://www.reddit.com/r/emacs/comments/f0arsr/til_buffers_have_multiple_points_one_for_each/][Reddit:Buffers have multiple points]].
+
+#+BEGIN_SRC emacs-lisp
+(add-to-list 'load-path (expand-file-name "/home/kahani/.emacs.d/lisp/colourful-points"))
+
+(require 'colourful-points)
+#+END_SRC
+
+* Git repository interaction
+Use [[http://magit.github.com/magit/][magit]] for interacting with git repositories.
+
+First, set your user-name and email for git here:
+#+BEGIN_SRC emacs-lisp
+(setq git-user.name "") ; e.g. (setq git-user.name "E. Max O'Mancer")
+(setq git-user.email "") ; e.g. (setq git-email "max@mailbox.org")
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+  ;; setup git
+  (when (and
+         (and (not (equal git-user.name "")) 
+              (not (equal git-user.email "")))
+         (equal ""
+                (shell-command-to-string "git config user.name")))
+    (shell-command (concat "git config --global \"" 
+                           git-user.name "\""))
+    (shell-command (concat "git config --global user.email \""
+                   git-user.email "\"")))
+
+  (use-package magit
+    :ensure t
+    :config
+    (global-set-key (kbd "C-x g") 'magit-status))
+#+END_SRC
+
+#+RESULTS:
+: t
+
+Indent code blocks correctly:
+#+BEGIN_SRC emacs-lisp
+(setq org-src-tab-acts-natively t)
+#+END_SRC
+
+Use virsual-fill-columns and visual-line-mode in text modes.
+#+BEGIN_SRC emacs-lisp
+  (use-package visual-fill-column
+    :ensure t
+    :defer t
+    :bind (("<f6>" . visual-fill-column-mode))
+    :init
+    (dolist (hook '(text-mode-hook
+                    latex-mode-hook))
+      (add-hook hook #'visual-fill-column-mode))
+    :config (setq-default visual-fill-column-center-text t
+                          visual-fill-column-fringes-outside-margins nil
+                          visual-fill-column-width 80))
+
+  (add-hook 'visual-fill-column-mode-hook 'visual-line-mode)
+
+  (add-hook 'text-mode-hook 'visual-fill-column-mode)
+#+END_SRC
+
+The [[https://github.com/joostkremers/writeroom-mode][=writeroom=]] package helps to create a less distracting writing environment. Toggle it with =C-c C-0=.
+#+BEGIN_SRC emacs-lisp
+(use-package writeroom-mode
+  :ensure t
+  :config
+  (define-key global-map (kbd "C-c C-0") 'writeroom-mode)
+  (add-hook 'writeroom-mode-hook
+	  (lambda ()
+	    (if writeroom-mode
+		(progn
+		  (blink-cursor-mode 0)
+		  (fringe-mode 0)
+		  (setq-local inhibit-message t))
+	      (progn
+		(blink-cursor-mode t)
+		(fringe-mode nil)
+		(setq-local inhibit-message nil))))))
+#+END_SRC
+
+Set the theme. Disable distracting menus etc.
+#+BEGIN_SRC emacs-lisp
+(use-package leuven-theme
+  :ensure t
+  :config
+  (load-theme 'leuven-dark t))
+
+(menu-bar-mode -1)
+(tool-bar-mode -1)
+(scroll-bar-mode -1)
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+(show-paren-mode 1) ; turn on paren matching
+(use-package rainbow-delimiters
+  :ensure t
+  :config
+  (add-hook 'prog-mode-hook #'rainbow-delimiters-mode))
+#+END_SRC
+
+The [[http://www.dr-qubit.org/undo-tree.html][=undo-tree= package]] provides a visualisation for Emacs's powerful undo/redo system, providing a visual timeline of changes in a tree-form (showing alternate branches). 
+#+BEGIN_SRC emacs-lisp
+(use-package undo-tree
+  :ensure t
+  :config
+  ;; (setq undo-tree-auto-save-history 1) ;; you can turn this on
+  ;; Each node in the undo tree should have a timestamp.
+  (setq undo-tree-visualizer-timestamps t)
+  ;; Show a diff window displaying changes between undo nodes.
+  (setq undo-tree-visualizer-diff t)  
+  (global-undo-tree-mode))
+#+END_SRC
+
+Set up [[https://github.com/Wilfred/helpful][=helpful=]] and [[https://github.com/justbur/emacs-which-key][=which-key=]] to aid in Emacs navigation. 
+#+BEGIN_SRC emacs-lisp
+;; helpful
+(use-package helpful
+  :ensure t
+  :config
+;; Note that the built-in `describe-function' includes both functions
+;; and macros. `helpful-function' is functions only, so we provide
+;; `helpful-callable' as a drop-in replacement.
+(global-set-key (kbd "C-h f") #'helpful-callable)
+(global-set-key (kbd "C-h v") #'helpful-variable)
+(global-set-key (kbd "C-h k") #'helpful-key)
+
+;;which-key (guide to appropriate continuations)
+(use-package which-key
+  :ensure t
+  :config
+  (require 'which-key)
+  (which-key-mode))
+
+;; I also recommend the following keybindings to get the most out of helpful:
+
+;; Lookup the current symbol at point. C-c C-d is a common keybinding
+;; for this in lisp modes.
+(global-set-key (kbd "C-c C-d") #'helpful-at-point)
+
+;; Look up *F*unctions (excludes macros).
+;;
+;; By default, C-h F is bound to `Info-goto-emacs-command-node'. Helpful
+;; already links to the manual, if a function is referenced there.
+(global-set-key (kbd "C-h F") #'helpful-function)
+
+;; Look up *C*ommands.
+;;
+;; By default, C-h C is bound to describe `describe-coding-system'. I
+;; don't find this very useful, but it's frequently useful to only
+;; look at interactive functions.
+(global-set-key (kbd "C-h C") #'helpful-command))
+#+END_SRC
+
+* Ivy
+[[https://github.com/abo-abo/swiper][Ivy]] is a generic completion frontend for Emacs.
+
+#+BEGIN_SRC emacs-lisp
+  ;; frequency matching in ivy
+  (use-package smex
+    :ensure t)
+
+  ;; ivy proper
+  (use-package ivy
+    :ensure t
+    :ensure ivy-yasnippet
+    :config
+    (require 'ivy)
+    (ivy-mode 1)
+    (setq ivy-use-virtual-buffers t)
+    (setq enable-recursive-minibuffers t)
+    (setq ivy-count-format "(%d/%d) ")
+
+                                          ; Slim down ivy display -turn off for now
+                                          ;  (setq ivy-count-format ""
+                                          ;	ivy-display-style nil
+                                          ;	ivy-minibuffer-faces nil)
+
+                                          ; Let ivy use flx for fuzzy-matching, except for swiper (≈occur)
+    (use-package flx
+      :ensure t)
+
+    (setq ivy-re-builders-alist '((swiper . ivy--regex-plus)
+                                  (swiper-all . ivy--regex-plus)
+                                  (t . ivy--regex-fuzzy)))
+
+                                          ; Use Enter on a directory to navigate into the directory, not open it with dired.
+    (define-key ivy-minibuffer-map (kbd "C-m") 'ivy-alt-done)
+                                          ;  (global-set-key "\C-s" 'swiper)
+    (global-set-key (kbd "C-S-s") 'swiper)
+    (global-set-key (kbd "C-S-r") 'swiper-all)
+    (global-set-key (kbd "C-c C-r") 'ivy-resume)
+                                          ;  (global-set-key (kbd "<f6>") 'ivy-resume)
+    (global-set-key (kbd "M-x") 'counsel-M-x)
+    (global-set-key (kbd "C-x C-f") 'counsel-find-file)
+    (global-set-key (kbd "<f1> f") 'counsel-describe-function)
+    (global-set-key (kbd "<f1> v") 'counsel-describe-variable)
+    (global-set-key (kbd "<f1> l") 'counsel-find-library)
+    (global-set-key (kbd "<f2> i") 'counsel-info-lookup-symbol)
+    (global-set-key (kbd "<f2> u") 'counsel-unicode-char)
+    (global-set-key (kbd "C-c g") 'counsel-git)
+    (global-set-key (kbd "C-c j") 'counsel-git-grep)
+    (global-set-key (kbd "C-c k") 'counsel-ag)
+    (global-set-key (kbd "C-x l") 'counsel-locate)
+    (global-set-key (kbd "C-S-o") 'counsel-rhythmbox)
+    (define-key minibuffer-local-map (kbd "C-r") 'counsel-minibuffer-history))
+
+  (use-package counsel
+    :ensure t)
+
+  (use-package ivy-hydra
+    :ensure t)
+
+  (use-package flyspell-correct-ivy
+    :ensure t)
+
+  (use-package ivy-bibtex
+    :ensure t)
+
+  (use-package ivy-todo
+    :ensure t)
+
+  ;; ;; prescient  - T9
+  ;; (use-package prescient
+  ;;   :ensure t
+  ;;   :config
+  ;;   (setq prescient-persist-mode t))
+  ;; (use-package ivy-prescient
+  ;;   :ensure t
+  ;;   :config
+  ;;   (setq ivy-prescient-mode t))
+  ;; (use-package company-prescient
+  ;;   :ensure t
+  ;;   :config
+  ;;   (setq company-prescient-mode t))
+#+END_SRC
+
+* Org-mode
+Set up Org-mode:
+
+#+BEGIN_SRC emacs-lisp
+(use-package org
+  :ensure t
+  :init
+  (setq org-src-fontify-natively t)	     
+  :config
+  ;; (add-to-list 'auto-mode-alist '("\\.org\\'" . org-mode))
+  (define-key org-mode-map (kbd "M-p") 'org-metaup)
+  (define-key org-mode-map (kbd "M-n") 'org-metadown)
+  (setq org-catch-invisible-edits 'show-and-error)
+  (setq org-cycle-separator-lines -1))
+
+(define-key org-mode-map (kbd "C-c h") 'outline-hide-body)
+(define-key org-mode-map (kbd "C-c s") 'outline-show-all)
+
+;; org speed keys
+(setq org-use-speed-commands t)
+
+;; org indentation
+(setq org-startup-indented t)
+
+;; On an org-heading, C-a goes to after the star, heading markers. To use speed keys, run C-a C-a to get to the star markers.
+;; C-e goes to the end of the heading, not including the tags.
+(setq org-special-ctrl-a/e 't)
+
+
+; org-mode pretty bullets
+(use-package org-bullets
+  :ensure t
+  :config
+  (add-hook 'org-mode-hook (lambda () (org-bullets-mode 1)))
+  (setq org-bullets-bullet-list '("◉" "○")))
+
+;; org-hooks
+(add-hook 'org-mode-hook #'colorful-points-mode)
+#+END_SRC
+
+* Screenwriting tools
+[[https://github.com/rnkn/fountain-mode][Fountain Mode]] is a scriptwriting program for GNU Emacs using the [[ https://fountain.io][Fountain plain text markup format]].
+#+BEGIN_SRC emacs-lisp
+;; screenwriting mode
+(use-package fountain-mode
+  :ensure t)
+
+(use-package olivetti
+  :ensure t)
+
+(use-package imenu-list
+  :ensure t)
+#+END_SRC
+
+* Miscellaneous text interaction
+
+** Lorem ipsum
+Insert nonsense text for layout purposes.
+
+#+BEGIN_SRC emacs-lisp
+(use-package lorem-ipsum
+  :ensure t)
+#+END_SRC
+
+** Spell-checking
+#+BEGIN_SRC emacs-lisp
+(use-package flyspell-correct
+  :ensure t
+  :config
+  ;; set ivy as correcting interface
+  (define-key flyspell-mode-map (kbd "C-;") 'flyspell-correct-wrapper))
+
+(use-package flyspell-correct-ivy
+  :ensure t)
+
+(require 'flymake)
+(setq ispell-program-name "aspell") ; could be ispell as well, depending on your preferences
+(setq ispell-dictionary "british") ; this can obviously be set to any language your spell-checking program supports
+
+(add-hook 'text-mode-hook 'flyspell-mode)
+#+END_SRC
+
+** Text completion
+Use [[https://company-mode.github.io/][=company-mode=]] for text completion.
+
+#+BEGIN_SRC emacs-lisp
+      ;; companymode
+      (use-package company
+        :ensure t
+        :config
+        (global-company-mode))
+
+      ;(add-hook 'after-init-hook 'global-company-mode)
+      ;; "text-mode" is a major mode for editing files of text in a human language"
+      ;; most major modes for non-programmers inherit from text-mode
+      (defun text-mode-hook-setup ()
+        ;; make `company-backends' local is critcal
+        ;; or else, you will have completion in every major mode, that's very annoying!
+        (make-local-variable 'company-backends)
+
+        ;; company-ispell is the plugin to complete words
+       (add-to-list 'company-backends '(company-ispell company-dabbrev))  
+        ;; OPTIONAL, if `company-ispell-dictionary' is nil, `ispell-complete-word-dict' is used 
+        ;;  but I prefer hard code the dictionary path. That's more portable.
+       (setq company-ispell-dictionary (file-truename "~/.emacs.d/dict/british-english-insane"))
+       (setq ispell-alternate-dictionary (file-truename "~/.emacs.d/dict/british-english-insane")))
+
+      (add-hook 'text-mode-hook #'text-mode-hook-setup)
+
+      (use-package company-statistics
+        :ensure t
+        :config
+        (add-hook 'after-init-hook 'company-statistics-mode))
+
+
+      (defun toggle-company-ispell ()
+        (interactive)
+        (cond
+         ((memq 'company-ispell company-backends)
+          (setq company-backends (delete 'company-ispell company-backends))
+          (message "company-ispell disabled"))
+         (t
+          (add-to-list 'company-backends 'company-ispell)
+          (message "company-ispell enabled!"))))
+
+      ;; unbind <return> and bind complete to <C-SPC> and <C-return>
+      (with-eval-after-load 'company
+        (define-key company-active-map (kbd "<return>") nil)
+        (define-key company-active-map (kbd "RET") nil)
+        (define-key company-active-map (kbd "C-SPC") #'company-complete-selection)
+        (define-key company-active-map (kbd "C-f") #'company-complete-selection)
+        (define-key company-active-map (kbd "<C-return>") #'company-complete-selection)
+        (define-key company-active-map (kbd "<C-tab>") #'company-complete-selection))
+
+      (setq company-idle-delay 0.5) ; default
+      (setq company-dabbrev-time-limit .1) ; default
+
+      ;; make <tab> cycle & <backtab> cycle back
+      (let ((map company-active-map))
+        (define-key map (kbd "<tab>") #'company-complete-common-or-cycle)
+        (define-key map (kbd "C-s") #'company-complete-common-or-cycle)
+        (define-key map (kbd "C-n") #'company-complete-common-or-cycle)
+        (define-key map (kbd "<backtab>") #'company-select-previous)
+        (define-key map (kbd "C-r") #'company-select-previous)
+        (define-key map (kbd "C-p") #'company-select-previous))
+
+      ;; weight by frequency
+      (setq company-transformers '(company-sort-by-occurrence))
+
+
+
+#+END_SRC
+
+** Upcase toggle
+Usually it's best to turn your capslock into an additional control key (not only for Emacs, but elsewhere as well). So if you've done this, here's a way to get capslock, by pressing =S-M-u= to toggle capslock, or =M-b M-u= to upcase last word.
+#+BEGIN_SRC emacs-lisp
+(use-package caps-lock
+  :ensure t
+  :config
+  (global-set-key (kbd "M-U") 'caps-lock-mode))
+#+END_SRC
+
+** Maybe include company for autocompletion?
+Maybe not though. This might be slow on a Raspberry Pi.
+
+* Customize-interface customisations
+Have Emacs store =customize= customisations in a separate file.
+
+#+BEGIN_SRC emacs-lisp
+  (setq custom-file "~/.emacs.d/emacs-custom.el")
+  (load custom-file)
+#+END_SRC
+
+* Create new prefix layer
+Use =C-z= as a prefix.
+#+BEGIN_SRC emacs-lisp
+;; Unbind Pesky Sleep Button and rebind as prefix key
+(global-unset-key "\C-z")
+(defalias 'ctl-z-keymap (make-sparse-keymap))
+(defvar ctl-z-map (symbol-function 'ctl-z-keymap)
+  "Global keymap for characters following C-z.")
+(define-key global-map "\C-z" 'ctl-z-keymap)
+#+END_SRC
+
+* Navigation
+Quickly jump to character(s) with [[https://github.com/abo-abo/avy][=avy=]].
+
+#+BEGIN_SRC emacs-lisp
+;; ;; avy - jump to character
+(use-package avy
+  :ensure t
+  :config
+  (global-set-key (kbd "C-z ;") 'avy-goto-char)
+  (global-set-key (kbd "C-z '") 'avy-goto-char-2)
+  (global-set-key (kbd "C-z w") 'avy-goto-word-1))
+#+END_SRC
+
+* Appearance
+** Typeface
+Set typeface based on what fonts are present: 
+#+BEGIN_SRC emacs-lisp
+    (defun my/set-typeface-function ()
+      "Set the typeface depending on what fonts are available."
+      (cond 
+       ((find-font (font-spec :name "Iosevka Oak Vise"))
+        (progn (setq default-frame-alist '((font . "Iosevka Oak Vise 12")))
+               (setq set-frame-font "Iosevka Oak Vise 12")
+               (message "setting font to Iosevka Oak Vise 12")
+               (set-face-attribute 'default nil :inherit nil :stipple nil :inverse-video nil :box nil :strike-through nil :overline nil :underline nil :slant 'normal :weight 'medium :height 120 :width 'normal :family "Iosevka Oak Vise")))
+       ((find-font (font-spec :name "Iosevka Term"))
+        (progn (set-default-font "Iosevka Term 12")
+               (set-face-attribute 'default nil :inherit nil :stipple nil :inverse-video nil :box nil :strike-through nil :overline nil :underline nil :slant 'normal :weight 'semi-bold :height 120 :width 'normal :family "Iosevka Term")))
+       ((find-font (font-spec :name "Iosevka"))
+        (progn (set-default-font "Iosevka 12")
+               (set-face-attribute 'default nil :inherit nil :stipple nil :inverse-video nil :box nil :strike-through nil :overline nil :underline nil :slant 'normal :weight 'semi-bold :height 120 :width 'normal :family "Iosevka")))
+       ((find-font (font-spec :name "DejaVu Sans Mono"))
+        (progn (set-default-font "DejaVu Sans Mono 12")
+               (set-face-attribute 'default nil :inherit nil :stipple nil :inverse-video nil :box nil :strike-through nil :overline nil :underline nil :weight 'book :height 120 :family "DejaVu Sans Mono")))
+       ('t
+        (progn (setq default-frame-alist '((font . "monospace 12")))
+               (set-face-attribute 'default nil :inherit nil :stipple nil :inverse-video nil :box nil :strike-through nil :overline nil :underline nil :slant 'normal :weight 'normal :height 120 :width 'normal :family "monospace")))))
+  ;; (add-hook 'after-make-frame-hook #'my/set-typeface-function) 
+#+END_SRC
+** File Navigator (treemacs)
+Treemacs is a file and project explorer similar to NeoTree or vim’s NerdTree, but largely inspired by the Project Explorer in Eclipse. It shows the file system outlines of your projects in a simple tree layout allowing quick navigation and exploration, while also possessing basic file management utilities. 
+#+BEGIN_SRC emacs-lisp
+(use-package treemacs
+  :pin MELPA
+  :ensure t
+  :defer t
+  :init
+  (with-eval-after-load 'winum
+    (define-key winum-keymap (kbd "M-0") #'treemacs-select-window))
+  :config
+  (progn
+    (setq treemacs-collapse-dirs              (if (executable-find "python") 3 0)
+          treemacs-file-event-delay           5000
+          treemacs-follow-after-init          t
+          treemacs-recenter-distance          0.1
+          treemacs-goto-tag-strategy          'refetch-index
+          treemacs-indentation                2
+          treemacs-indentation-string         " "
+          treemacs-is-never-other-window      nil
+          treemacs-no-png-images              nil
+          treemacs-project-follow-cleanup     nil
+          treemacs-recenter-after-file-follow nil
+          treemacs-recenter-after-tag-follow  nil
+          treemacs-show-hidden-files          t
+          treemacs-silent-filewatch           nil
+          treemacs-silent-refresh             nil
+          treemacs-sorting                    'alphabetic-desc
+          treemacs-tag-follow-cleanup         t
+          treemacs-tag-follow-delay           1.5
+          treemacs-width                      35)
+
+    (treemacs-follow-mode t)
+    (treemacs-filewatch-mode t)
+    (pcase (cons (not (null (executable-find "git")))
+                 (not (null (executable-find "python3"))))
+      (`(t . t)
+       (treemacs-git-mode 'extended))
+      (`(t . _)
+       (treemacs-git-mode 'simple))))
+  :bind
+  (:map global-map
+        ("M-0"       . treemacs-select-window)
+        ("C-x t 1"   . treemacs-delete-other-windows)
+        ("C-x t t"   . treemacs)
+        ("C-x t B"   . treemacs-bookmark)
+        ("C-x t C-t" . treemacs-find-file)
+        ("C-x t M-t" . treemacs-find-tag)))
+#+END_SRC
+* Automatically generate .el init from this file
+Rather than manually extracting the Lisp code from this literate
+document each time we alter it, let's instead add a ‘hook’ ---a method that is invoked on a particular event, in this case when we save the file.  More precisely, in this case, ~C-x C-s~ is a normal save whereas ~C-u C-x C-s~ is a save after forming ~init.elc~ and 
+~README.md~. (This is based on [[https://github.com/alhassy/emacs.d][Alhassy's "A Life Configuring Emacs"]], with modifications.) 
+
+*** The =my/make-init-el-and-README= function
+:PROPERTIES:
+:CUSTOM_ID: The-my-make-init-el-and-README-function
+:END:
+
+We ‘hook on’ the following function to the usual save method
+that is associated with this file only and no other.
+ 
+#+name: enable making init and readme
+#+begin_src emacs-lisp :eval never-export
+    (defun my/make-init-el ()
+      "Tangle an el from my init.org."
+      (interactive "P") ;; Places value of universal argument into: current-prefix-arg
+
+      (when current-prefix-arg
+        (let* ((time      (current-time))
+               (_date     (format-time-string "_%Y-%m-%d"))
+               (.emacs    "~/.emacs")
+               (.emacs.el "~/.emacs.el")
+  (file (buffer-file-name))
+          (async-quiet-switch "-q"))
+          ;; Make README.org
+          ;; (save-excursion
+          ;;   (org-babel-execute-src-block))
+
+          ;; remove any other initialisation file candidates
+          (ignore-errors
+            (f-move .emacs    (concat .emacs _date))
+            (f-move .emacs.el (concat .emacs.el _date)))
+
+          ;; Make init.el
+          (org-babel-tangle)
+          (byte-recompile-file "~/.emacs.d/init.el") 
+          (load-file "~/.emacs.d/init.el")
+
+          ;; Acknowledgement
+          (message "Tangled, compiled, and loaded init.el in … %.06f seconds"
+                   (float-time (time-since time))))))
+
+  (defun autocompile-init-dot-org ()
+    (when (string= (file-name-nondirectory (buffer-file-name)) "init.org")
+      (add-hook 'after-save-hook 'my/make-init-el nil 'local-to-this-file-please)))
+
+  (add-hook 'find-file-hook 'autocompile-init-dot-org)
+    ;; (add-hook 'after-save-hook 'my/make-init-el nil 'local-to-this-file-please)
+#+end_src
+  
+** Results of tangling .org to .el
+#+RESULTS: enable making init and readme  
+| my/make-init-el-and-README | t |
+
+#+BEGIN_SRC emacs-lisp
+    (defvar *config-file* (expand-file-name "init.org" user-emacs-directory)
+      "The Configuration File.")
+
+    (defvar *config-last-change* (nth 5 (file-attributes *config-file*))
+      "Last modification time of the configuration file.")
+
+    (defvar *show-async-tangle-results* nil
+      "Keeps *emacs* async buffers arround for later inspection.")
+
+    (defun djm/config-updated ()
+      "Checks if the configuration file has been updated since the last time."
+      (time-less-p *config-last-change*
+                   (nth 5 (file-attributes *config-file*))))
+
+    (defun djm/config-tangle ()
+      "Tangle the org file asynchronously."
+      (interactive)
+      (when (djm/config-updated)
+        (setq *config-last-change*
+              (nth 5 (file-attributes *config-file*)))
+        (djm/async-babel-tangle *config-file*)))
+
+    (defun djm/async-babel-tangle (org-file)
+      "Tangles org-file async"
+      (let ((init-tangle-start-time (current-time))
+            (file (buffer-file-name))
+            (async-quiet-switch "-q"))
+        (async-start
+         `(lambda ()
+            (require 'org)
+            (org-babel-tangle-file ,org-file)
+            (byte-recompile-file "~/.emacs.d/init.el") 
+            (load-file "~/.emacs.d/init.el"))
+         (unless *show-async-tangle-results*
+           `(lambda (result)
+              (if result
+                  (message "SUCCESS: %s successfully tangled & byte-compiled (%.2fs)."
+                           ,org-file
+                           (float-time (time-subtract (current-time)
+                                                      ',init-tangle-start-time)))
+                (message "ERROR: %s as tangle failed." ,org-file)))))))
+#+END_SRC
+
+* File local variables                                               :ARCHIVE:
+# Local Variables:
+# End:

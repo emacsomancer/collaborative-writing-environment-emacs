@@ -1,0 +1,10 @@
+* Collaborative Writing with Emacs
+More to be added here, but the generally idea is an Emacs setup for writing, especially collaborative writing (at least over the LAN).
+
+I set this up on a Raspberry Pi (with Emacs installed to it), and then connect in from other machines with a script (included as a template here as =launcher.sh=).
+
+Each person gets a different colour to indicate the part of the file they're editing.
+
+Includes: =org-mode=, =fountain-mode=.
+
+(A literate configuration is used as well: make changes in =init.org= tangle your config (i.e. generate =init.el= and =init.elc=) with ~C-u C-x C-s~.)
