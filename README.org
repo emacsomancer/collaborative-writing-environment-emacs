@@ -1,4 +1,4 @@
-* Collaborative Writing with Emacs [[./_images/emacs-collab.png]]
+*  [[./_images/emacs-collab.png]] Collaborative Writing with Emacs
 More to be added here, but the general idea is an Emacs setup for writing, especially collaborative writing (at least over the LAN). Clone this to a (brand new: don't overwrite your own Emacs config) location: ~git clone https://gitlab.com/emacsomancer/collaborative-writing-environment-emacs.git ~/.emacs.d~
 
 The first time it's launched, it will tangle you a new config (you may want to go to ~/.emacs.d/init.org~ and edit the configuration appropriately, e.g. putting in your git username and email [if you use git; otherwise ignore!]).
