@@ -12,3 +12,6 @@ Each person gets a different colour to indicate the part of the file they're edi
 Includes: =org-mode=, =fountain-mode=.
 
 (A literate configuration is used as well: make changes in =init.org= tangle your config (i.e. generate =init.el= and =init.elc=) with ~C-u C-x C-s~.)
+
+* Notes
+- migrated from: [[git@gitlab.com:emacsomancer/collaborative-writing-environment-emacs.git][git@gitlab.com:emacsomancer/collaborative-writing-environment-emacs.git]]
